@@ -5,10 +5,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::net::SocketAddr;
+use std::env;
+use dotenv::dotenv;
 
 const PORT: u16 = 5000;
-const GEMINI_API_KEY: &str = "API_KEY"; 
-const MODEL_NAME: &str = "gemini-2.0-flash";
 
 #[derive(Deserialize, Debug)]
 struct Mt4Data {
@@ -33,6 +33,8 @@ struct Part {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
     let app = Router::new().route("/analyze", post(handle_analyze));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], PORT));
@@ -45,7 +47,6 @@ async fn main() {
 async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     println!("\n📈 Received data for: {}", payload.symbol);
     
-    // Geminiへのプロンプト作成
     let prompt_text = format!(
         "あなたはプロのFXトレーダーです。以下の市場データに基づいて現状を分析してください。\n\
         対象通貨: {}\n\
@@ -73,12 +74,14 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     }
 }
 
-// Gemini API通信部分
 async fn call_gemini_api(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
+    let model_name = env::var("MODEL_NAME").unwrap_or("gemini-2.0-flash".to_string());
+
     let client = reqwest::Client::new();
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        MODEL_NAME, GEMINI_API_KEY
+        model_name, api_key
     );
 
     let request_body = GeminiRequest {
