@@ -8,12 +8,21 @@ use std::net::SocketAddr;
 use std::env;
 use dotenv::dotenv;
 
-const PORT: u16 = 80;
+const PORT: u16 = 3000;
+
+#[derive(Deserialize, Debug, Serialize)]
+struct Candle {
+    time: String,
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+}
 
 #[derive(Deserialize, Debug)]
 struct Mt4Data {
     symbol: String,
-    candles: String,
+    candles: Vec<Candle>, 
 }
 
 #[derive(Serialize)]
@@ -47,6 +56,11 @@ async fn main() {
 async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     println!("\n📈 Received data for: {}", payload.symbol);
     
+    let candles_str = payload.candles.iter()
+        .map(|c| format!("({}, {}, {}, {}, {})", c.time, c.open, c.high, c.low, c.close))
+        .collect::<Vec<String>>()
+        .join("\n");
+
     let prompt_text = format!(
         "あなたはプロのFXトレーダーです。以下の市場データに基づいて現状を分析してください。\n\
         対象通貨: {}\n\
@@ -57,7 +71,7 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         2. 直近の注目すべきプライスアクション\n\
         3. 短期的な売買バイアス（強気/弱気/中立）\n\
         簡潔に箇条書きで出力してください。",
-        payload.symbol, payload.candles
+        payload.symbol, candles_str
     );
 
     match call_gemini_api(&prompt_text).await {
@@ -76,7 +90,7 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
 
 async fn call_gemini_api(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
     let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let model_name = env::var("MODEL_NAME").unwrap_or("gemini-2.0-flash".to_string());
+    let model_name = env::var("MODEL_NAME").unwrap_or("gemini-3-flash-preview".to_string());
 
     let client = reqwest::Client::new();
     let url = format!(
