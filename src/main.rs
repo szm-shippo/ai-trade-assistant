@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use std::env;
 use dotenv::dotenv;
 
-const PORT: u16 = 5000;
+const PORT: u16 = 80;
 
 #[derive(Deserialize, Debug)]
 struct Mt4Data {
