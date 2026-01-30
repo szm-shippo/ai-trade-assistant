@@ -34,14 +34,25 @@ struct GeminiRequest {
     contents: Vec<Content>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Content {
+    role: Option<String>,
     parts: Vec<Part>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Part {
     text: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct GeminiResponse {
+    candidates: Option<Vec<Candidate>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Candidate {
+    content: Content,
 }
 
 #[tokio::main]
@@ -94,7 +105,11 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
             println!("--------------------------------------------------");
             println!("{}", analysis);
             println!("--------------------------------------------------");
-            Json(serde_json::json!({ "status": "success", "message": "Analysis printed to console" }))
+            Json(serde_json::json!({
+                "status": "success",
+                "symbol": payload.symbol,
+                "analysis": analysis
+            }))
         }
         Err(e) => {
             eprintln!("Error calling Gemini: {}", e);
@@ -115,6 +130,7 @@ async fn call_gemini_api(prompt: &str) -> Result<String, Box<dyn std::error::Err
 
     let request_body = GeminiRequest {
         contents: vec![Content {
+            role: Some("user".to_string()),
             parts: vec![Part {
                 text: prompt.to_string(),
             }],
@@ -131,12 +147,14 @@ async fn call_gemini_api(prompt: &str) -> Result<String, Box<dyn std::error::Err
         return Err(format!("API Error: {}", err_text).into());
     }
 
-    let res_json: Value = res.json().await?;
+    let response: GeminiResponse = res.json().await?;
     
-    let text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .unwrap_or("No content generated")
-        .to_string();
+    let text = response.candidates
+        .as_ref()                          // Optionの中身を借用
+        .and_then(|c| c.first())           // candidates配列の先頭を取得
+        .and_then(|c| c.content.parts.first()) // parts配列の先頭を取得
+        .map(|p| p.text.clone())           // テキストをコピー
+        .unwrap_or_else(|| "No analysis generated".to_string());
 
     Ok(text)
 }
