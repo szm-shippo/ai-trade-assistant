@@ -7,6 +7,7 @@ use serde_json::Value;
 use std::net::SocketAddr;
 use std::env;
 use dotenv::dotenv;
+use std::fs;
 
 const PORT: u16 = 3000;
 
@@ -67,12 +68,14 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         };
 
     let base_candles_str = format_candles(&payload.candles);
-
     let low_candles_str = format_candles(&payload.low_candles);
+    let strategy_instruction = fs::read_to_string("strategy.txt").unwrap_or_else(|_| {
+        println!("Warning: strategy.txt not found! Using default instruction.");
+        "あなたはFXトレーダーです。データを分析してください。".to_string()
+    });
 
     let prompt_text = format!(
-        "あなたはプロのFXトレーダーです。以下の市場データに基づいて現状を分析してください。\n\
-        対象通貨: {}\n\n
+        "対象通貨: {}\n
 
         【上位足データ ({}分足)】 - トレンド把握用\n
         (Time, Open, High, Low, Close)\n
@@ -82,12 +85,8 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         (Time, Open, High, Low, Close)\n
         {}\n\n
 
-        【指示】\n
-        1. トレンド方向 (上昇/下降/レンジ) とその強さ\n\
-        2. 直近の注目すべきプライスアクション\n\
-        3. 短期的な売買バイアス（強気/弱気/中立）\n\
-        簡潔に箇条書きで出力してください。",
-        payload.symbol, payload.period, base_candles_str, payload.low_period, low_candles_str
+        {}",
+        payload.symbol, payload.period, base_candles_str, payload.low_period, low_candles_str, strategy_instruction
     );
 
     match call_gemini_api(&prompt_text).await {
