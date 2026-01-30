@@ -22,7 +22,10 @@ struct Candle {
 #[derive(Deserialize, Debug)]
 struct Mt4Data {
     symbol: String,
-    candles: Vec<Candle>, 
+    period: i32,
+    candles: Vec<Candle>,
+    low_period: i32,
+    low_candles: Vec<Candle>, 
 }
 
 #[derive(Serialize)]
@@ -55,23 +58,36 @@ async fn main() {
 
 async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     println!("\n📈 Received data for: {}", payload.symbol);
-    
-    let candles_str = payload.candles.iter()
-        .map(|c| format!("({}, {}, {}, {}, {})", c.time, c.open, c.high, c.low, c.close))
-        .collect::<Vec<String>>()
-        .join("\n");
+
+    let format_candles = |candles: &Vec<Candle>| -> String {
+        candles.iter()
+            .map(|c| format!("({}, {:.3}, {:.3}, {:.3}, {:.3})", c.time, c.open, c.high, c.low, c.close))
+            .collect::<Vec<String>>()
+            .join("\n")
+        };
+
+    let base_candles_str = format_candles(&payload.candles);
+
+    let low_candles_str = format_candles(&payload.low_candles);
 
     let prompt_text = format!(
         "あなたはプロのFXトレーダーです。以下の市場データに基づいて現状を分析してください。\n\
-        対象通貨: {}\n\
-        データ形式: 最新の足から過去30本分 (Time, Open, High, Low, Close)\n\n\
-        【データ】\n{}\n\n\
-        【評価軸】\n\
+        対象通貨: {}\n\n
+
+        【上位足データ ({}分足)】 - トレンド把握用\n
+        (Time, Open, High, Low, Close)\n
+        {}\n\n
+
+        【下位足データ ({}分足)】 - エントリータイミング用\n
+        (Time, Open, High, Low, Close)\n
+        {}\n\n
+
+        【指示】\n
         1. トレンド方向 (上昇/下降/レンジ) とその強さ\n\
         2. 直近の注目すべきプライスアクション\n\
         3. 短期的な売買バイアス（強気/弱気/中立）\n\
         簡潔に箇条書きで出力してください。",
-        payload.symbol, candles_str
+        payload.symbol, payload.period, base_candles_str, payload.low_period, low_candles_str
     );
 
     match call_gemini_api(&prompt_text).await {
