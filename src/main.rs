@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::env;
 use dotenv::dotenv;
 use std::fs;
+use chrono::Local;
 
 const PORT: u16 = 3000;
 
@@ -85,8 +86,13 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         "あなたはFXトレーダーです。データを分析してください。".to_string()
     });
 
+    let now = Local::now();
+    let current_time_str = now.format("%Y年%m月%d日 %H:%M:%S").to_string();
+
     let prompt_text = format!(
         "対象通貨: {}\n
+
+        現在時刻: {}\n
 
         【上位足データ ({}分足)】 - トレンド把握用\n
         (Time, Open, High, Low, Close)\n
@@ -97,7 +103,7 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         {}\n\n
 
         {}",
-        payload.symbol, payload.period, base_candles_str, payload.low_period, low_candles_str, strategy_instruction
+        payload.symbol, current_time_str,  payload.period, base_candles_str, payload.low_period, low_candles_str, strategy_instruction
     );
 
     match call_gemini_api(&prompt_text).await {
