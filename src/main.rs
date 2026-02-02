@@ -136,6 +136,8 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         payload.symbol, current_time_str, payload.period, base_candles_str, payload.mid_period, mid_candles_str, payload.low_period, low_candles_str, payload.sub_symbol, payload.sub_symbol_period, sub_candles_str, payload.sub_symbol_low_period, sub_low_candles_str, strategy_instruction
     );
 
+    save_prompt_log(&payload.symbol, &prompt_text);
+
     match call_gemini_api(&prompt_text).await {
         Ok(analysis) => {
             println!("--------------------------------------------------");
@@ -195,28 +197,34 @@ async fn call_gemini_api(prompt: &str) -> Result<String, Box<dyn std::error::Err
     Ok(text)
 }
 
-fn save_json_log(payload: &Mt4Data) {
-    let log_dir = "logs/data/";
+fn write_log_file(subdir: &str, prefix: &str, symbol: &str, extension: &str, content: &str) {
+    let dir_path = format!("logs/{}", subdir);
 
-    if let Err(e) = fs::create_dir_all(log_dir) {
+    if let Err(e) = fs::create_dir_all(&dir_path) {
         eprintln!("Failed to create log directory: {}", e);
         return;
     }
 
     let now = Local::now();
-    let filepath = format!("{}/log_{}_{}.json", 
-        log_dir,
-        payload.symbol, 
-        now.format("%Y%m%d_%H%M%S")
+    let filepath = format!("{}/{}_{}_{}.{}", 
+        dir_path,
+        prefix,
+        symbol,
+        now.format("%Y%m%d_%H%M%S"),
+        extension
     );
 
+    if let Err(e) = fs::write(&filepath, content) {
+        eprintln!("Failed to write log file: {}", e);
+    } else {
+        println!("{} saved: {}", prefix, filepath);
+    }
+}
+
+fn save_json_log(payload: &Mt4Data) {
     match serde_json::to_string_pretty(payload) {
         Ok(json_content) => {
-            if let Err(e) = fs::write(&filepath, json_content) {
-                eprintln!("Failed to write log file: {}", e);
-            } else {
-                println!("Log saved: {}", filepath);
-            }
+            write_log_file("data", "log", &payload.symbol, "json", &json_content);
         },
         Err(e) => {
             eprintln!("Failed to serialize payload: {}", e);
@@ -225,23 +233,5 @@ fn save_json_log(payload: &Mt4Data) {
 }
 
 fn save_prompt_log(symbol: &str, prompt_content: &str) {
-    let log_dir = "logs/prompts/";
-
-    if let Err(e) = fs::create_dir_all(log_dir) {
-        eprintln!("Failed to create log directory: {}", e);
-        return;
-    }
-
-    let now = Local::now();
-    let filepath = format!("{}/prompt_{}_{}.txt", 
-        log_dir,
-        symbol, 
-        now.format("%Y%m%d_%H%M%S")
-    );
-
-    if let Err(e) = fs::write(&filepath, prompt_content) {
-        eprintln!("Failed to write prompt log: {}", e);
-    } else {
-        println!("Prompt log saved: {}", filepath);
-    }
+    write_log_file("prompts", "prompt", symbol, "txt", prompt_content);
 }
