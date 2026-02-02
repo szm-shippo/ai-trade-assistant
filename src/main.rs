@@ -84,16 +84,7 @@ async fn main() {
 async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     println!("\n📈 Received data for: {}", payload.symbol);
 
-    if let Ok(json_content) = serde_json::to_string_pretty(&payload) {
-        let now = Local::now();
-        let filename = format!("log_{}_{}.json", 
-            payload.symbol, 
-            now.format("%Y%m%d_%H%M%S") // ファイル名に使えないコロン(:)は避ける
-        );
-        if let Err(e) = fs::write(filename, json_content) {
-            eprintln!("File write error: {}", e);
-        }
-    }
+    save_json_log(&payload);
 
     let format_candles = |candles: &Vec<Candle>| -> String {
         candles.iter()
@@ -202,4 +193,55 @@ async fn call_gemini_api(prompt: &str) -> Result<String, Box<dyn std::error::Err
         .unwrap_or_else(|| "No analysis generated".to_string());
 
     Ok(text)
+}
+
+fn save_json_log(payload: &Mt4Data) {
+    let log_dir = "logs/data/";
+
+    if let Err(e) = fs::create_dir_all(log_dir) {
+        eprintln!("Failed to create log directory: {}", e);
+        return;
+    }
+
+    let now = Local::now();
+    let filepath = format!("{}/log_{}_{}.json", 
+        log_dir,
+        payload.symbol, 
+        now.format("%Y%m%d_%H%M%S")
+    );
+
+    match serde_json::to_string_pretty(payload) {
+        Ok(json_content) => {
+            if let Err(e) = fs::write(&filepath, json_content) {
+                eprintln!("Failed to write log file: {}", e);
+            } else {
+                println!("Log saved: {}", filepath);
+            }
+        },
+        Err(e) => {
+            eprintln!("Failed to serialize payload: {}", e);
+        }
+    }
+}
+
+fn save_prompt_log(symbol: &str, prompt_content: &str) {
+    let log_dir = "logs/prompts/";
+
+    if let Err(e) = fs::create_dir_all(log_dir) {
+        eprintln!("Failed to create log directory: {}", e);
+        return;
+    }
+
+    let now = Local::now();
+    let filepath = format!("{}/prompt_{}_{}.txt", 
+        log_dir,
+        symbol, 
+        now.format("%Y%m%d_%H%M%S")
+    );
+
+    if let Err(e) = fs::write(&filepath, prompt_content) {
+        eprintln!("Failed to write prompt log: {}", e);
+    } else {
+        println!("Prompt log saved: {}", filepath);
+    }
 }

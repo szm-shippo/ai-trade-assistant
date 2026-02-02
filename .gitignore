@@ -1,4 +1,4 @@
 /target
 .env
 strategy.txt
-*.json
+logs
