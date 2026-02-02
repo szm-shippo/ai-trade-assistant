@@ -9,7 +9,6 @@ use std::env;
 use dotenv::dotenv;
 use std::fs;
 use chrono::Local;
-
 const PORT: u16 = 3000;
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -21,13 +20,24 @@ struct Candle {
     close: f64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Mt4Data {
     symbol: String,
     period: i32,
     candles: Vec<Candle>,
     low_period: i32,
     low_candles: Vec<Candle>, 
+
+    #[serde(default)]
+    sub_symbol: String,
+    #[serde(default)]
+    sub_symbol_period: i32,
+    #[serde(default)]
+    sub_candles: Vec<Candle>, 
+    #[serde(default)]
+    sub_symbol_low_period: i32,
+    #[serde(default)]
+    sub_low_candles: Vec<Candle>,
 }
 
 #[derive(Serialize)]
@@ -72,6 +82,17 @@ async fn main() {
 async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     println!("\n📈 Received data for: {}", payload.symbol);
 
+    if let Ok(json_content) = serde_json::to_string_pretty(&payload) {
+        let now = Local::now();
+        let filename = format!("log_{}_{}.json", 
+            payload.symbol, 
+            now.format("%Y%m%d_%H%M%S") // ファイル名に使えないコロン(:)は避ける
+        );
+        if let Err(e) = fs::write(filename, json_content) {
+            eprintln!("File write error: {}", e);
+        }
+    }
+
     let format_candles = |candles: &Vec<Candle>| -> String {
         candles.iter()
             .map(|c| format!("({}, {:.3}, {:.3}, {:.3}, {:.3})", c.time, c.open, c.high, c.low, c.close))
@@ -81,6 +102,9 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
 
     let base_candles_str = format_candles(&payload.candles);
     let low_candles_str = format_candles(&payload.low_candles);
+    let sub_candles_str = format_candles(&payload.sub_candles);
+    let sub_low_candles_str = format_candles(&payload.sub_low_candles);
+
     let strategy_instruction = fs::read_to_string("strategy.txt").unwrap_or_else(|_| {
         println!("Warning: strategy.txt not found! Using default instruction.");
         "あなたはFXトレーダーです。データを分析してください。".to_string()
@@ -90,20 +114,29 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     let current_time_str = now.format("%Y年%m月%d日 %H:%M:%S").to_string();
 
     let prompt_text = format!(
-        "対象通貨: {}\n
+        "=== メイン分析対象: {} ===\n
 
         現在時刻: {}\n
 
-        【上位足データ ({}分足)】 - トレンド把握用\n
+        【上位足 ({}分足)】 - 環境認識
         (Time, Open, High, Low, Close)\n
         {}\n\n
 
-        【下位足データ ({}分足)】 - エントリータイミング用\n
+        【下位足 ({}分足)】 - エントリータイミング用\n
         (Time, Open, High, Low, Close)\n
+        {}\n\n
+
+        === 相関確認対象: {} ===\n
+        (メイン通貨ペアとの同調・乖離を確認してください)\n
+
+        【相関・上位足 ({}分足)】
+        {}\n\n
+
+        【相関・下位足 ({}分足)】\n
         {}\n\n
 
         {}",
-        payload.symbol, current_time_str,  payload.period, base_candles_str, payload.low_period, low_candles_str, strategy_instruction
+        payload.symbol, current_time_str,  payload.period, base_candles_str, payload.low_period, low_candles_str, payload.sub_symbol, payload.sub_symbol_period, sub_candles_str, payload.sub_symbol_low_period, sub_low_candles_str, strategy_instruction
     );
 
     match call_gemini_api(&prompt_text).await {
