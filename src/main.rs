@@ -25,6 +25,8 @@ struct Mt4Data {
     symbol: String,
     period: i32,
     candles: Vec<Candle>,
+    mid_period: i32,
+    mid_candles: Vec<Candle>,
     low_period: i32,
     low_candles: Vec<Candle>, 
 
@@ -101,6 +103,7 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
         };
 
     let base_candles_str = format_candles(&payload.candles);
+    let mid_candles_str = format_candles(&payload.mid_candles);
     let low_candles_str = format_candles(&payload.low_candles);
     let sub_candles_str = format_candles(&payload.sub_candles);
     let sub_low_candles_str = format_candles(&payload.sub_low_candles);
@@ -114,29 +117,32 @@ async fn handle_analyze(Json(payload): Json<Mt4Data>) -> Json<Value> {
     let current_time_str = now.format("%Y年%m月%d日 %H:%M:%S").to_string();
 
     let prompt_text = format!(
-        "=== メイン分析対象: {} ===\n
+        "=== メイン分析対象: {} ===
 
-        現在時刻: {}\n
+        現在時刻: {}
 
         【上位足 ({}分足)】 - 環境認識
-        (Time, Open, High, Low, Close)\n
-        {}\n\n
+        (Time, Open, High, Low, Close)
+        {}
 
-        【下位足 ({}分足)】 - エントリータイミング用\n
-        (Time, Open, High, Low, Close)\n
-        {}\n\n
+        【中位足 ({}分足)】 - 詳細分析用
+        (Time, Open, High, Low, Close)
+        {}
 
-        === 相関確認対象: {} ===\n
-        (メイン通貨ペアとの同調・乖離を確認してください)\n
+        【下位足 ({}分足)】 - エントリータイミング用
+        {}
+
+        === 相関確認対象: {} ===
+        (メイン通貨ペアとの同調・乖離を確認してください)
 
         【相関・上位足 ({}分足)】
-        {}\n\n
+        {}
 
-        【相関・下位足 ({}分足)】\n
-        {}\n\n
+        【相関・下位足 ({}分足)】
+        {}
 
         {}",
-        payload.symbol, current_time_str,  payload.period, base_candles_str, payload.low_period, low_candles_str, payload.sub_symbol, payload.sub_symbol_period, sub_candles_str, payload.sub_symbol_low_period, sub_low_candles_str, strategy_instruction
+        payload.symbol, current_time_str, payload.period, base_candles_str, payload.mid_period, mid_candles_str, payload.low_period, low_candles_str, payload.sub_symbol, payload.sub_symbol_period, sub_candles_str, payload.sub_symbol_low_period, sub_low_candles_str, strategy_instruction
     );
 
     match call_gemini_api(&prompt_text).await {
